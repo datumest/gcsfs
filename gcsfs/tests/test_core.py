@@ -271,6 +271,30 @@ def test_multi_upload(gcs):
     assert gcs.info(fn)["contentType"] == "application/octet-stream"
 
 
+def test_multi_upload_non_aligned_flush(gcs):
+    from unittest.mock import patch
+    fn = TEST_BUCKET + "/test_non_aligned"
+    block_size = 2**18
+
+    with patch.object(gcs, "call", wraps=gcs.call) as mock_call:
+        with gcs.open(fn, "wb", block_size=block_size) as f:
+            f.write(b"x" * (block_size - 10))
+            f.write(b"y" * 20)
+
+            # Auto-flush should have happened.
+            upload_calls = [c for c in mock_call.call_args_list if c[0][0] == "POST"]
+            assert len(upload_calls) == 1
+            assert len(upload_calls[0][1]["data"]) == block_size
+            mock_call.reset_mock()
+
+        # After close, another flush happens for the remainder.
+        upload_calls = [c for c in mock_call.call_args_list if c[0][0] == "POST"]
+        assert len(upload_calls) == 1
+        assert len(upload_calls[0][1]["data"]) == 10
+
+    assert gcs.cat(fn) == b"x" * (block_size - 10) + b"y" * 20
+
+
 def test_multi_upload_with_kms(gcs):
     if not gcs.on_google:
         pytest.skip("emulator does not support kmsKeyName")

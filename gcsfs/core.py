@@ -2251,6 +2251,10 @@ class GCSFile(fsspec.spec.AbstractBufferedFile):
 
             # Select the biggest possible chunk of data to be uploaded
             chunk_length = min(l, GCS_MAX_BLOCK_SIZE)
+            if not (final and self.autocommit and chunk_length == l):
+                chunk_length = (chunk_length // GCS_MIN_BLOCK_SIZE) * GCS_MIN_BLOCK_SIZE
+                if chunk_length == 0:
+                    return False
             chunk = data[:chunk_length]
             if final and self.autocommit and chunk_length == l:
                 if l:
